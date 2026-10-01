@@ -1,104 +1,104 @@
-# Kantor Bos 🏢
+# Kantor Bos 🏢🎮
 
-Dashboard pribadi yang di-host di Cloudflare Workers:
+**Office simulator pixel** pribadi sekaligus dashboard kerja. Dibangun dengan **Next.js (App Router)** lewat [vinext](https://github.com/cloudflare/vinext), dan berjalan di **Cloudflare Workers**.
 
-- **Kantor pixel**: setiap proyek tampil sebagai karyawan di mejanya. Statusnya ada lima: mengetik (sedang deploy), centang hijau (sukses), tanda "!" merah (gagal), "z" (tidur, tidak ada aktivitas 3 hari), dan santai (belum pernah deploy).
-- **Jadwal kuliah** dalam jam Jepang (JST): kuliah berikutnya dengan hitung mundur, pengingat 15 menit sebelum kelas, dan ekspor ke kalender HP (.ics).
-- **Upload ZIP**: file zip langsung di-push ke GitHub. Hanya file yang berubah yang di-upload, lalu Cloudflare deploy otomatis.
-- **Data**: lihat, tambah, ubah, dan hapus isi **KV**, serta jalankan SQL di **D1**.
-- **Riwayat**: daftar push, run GitHub Actions, dan deployment Cloudflare Pages.
-- **PWA**: bisa di-"Install" atau "Tambahkan ke layar utama" di HP.
+## Fitur
+- **Kantor hidup**: setiap proyek adalah karyawan pixel yang bergerak sendiri.
+  - Jalan ke dispenser air, bikin kopi, rebahan di sofa, main arcade, beli camilan.
+  - Nyamperin meja teman untuk ngobrol, dengan gelembung bicara bergantian.
+  - **Bos keliling inspeksi**: memuji karyawan yang deploy-nya sukses, menegur yang gagal, membangunkan yang tidur, lalu kadang turun ambil kopi.
+  - Status ditampilkan langsung di karyawan:
+    - **Mengetik** dengan layar laptop berkedip: sedang deploy
+    - **✓**: sukses, ada **konfeti** saat baru berhasil
+    - **!** dengan keringat: gagal
+    - **z**: tidur
+  - Langit di jendela, jam dinding, dan lampu malam mengikuti **jam Jepang**.
+  - Feed **Kabar Kantor** mencatat semua kejadian.
+- **HUD game**: level, bar XP, dan koin. Setiap push = +1 XP, dan trofi di dinding bertambah sesuai level.
+- **Jadwal kuliah (JST)**:
+  - "Quest" aktif atau berikutnya dengan hitung mundur dan bar progres.
+  - Notifikasi 15 menit sebelum kelas.
+  - Ekspor ke kalender HP (.ics) dengan alarm.
+- **Upload ZIP → GitHub**: hanya file yang berubah yang di-upload. File `.env` dan `.dev.vars` otomatis tidak ikut. Ada mode *Ganti semua* atau *Tambah/timpa*.
+- **Data**: editor KV (lihat, tambah, ubah, hapus) dan konsol SQL untuk D1.
+- **Log deploy**: push, GitHub Actions, dan Cloudflare Pages.
+- **PWA**: bisa di-"Tambahkan ke layar utama" di HP. Ada efek suara 8-bit yang bisa dimatikan.
 
 ---
 
-## Setup pertama (±15 menit, cukup sekali)
+## Setup (cukup sekali)
 
-### 1. Taruh kode ini di GitHub
-Buat repo baru (contoh: `kantor-bos`, sebaiknya **Private**), lalu upload isi folder ini ke repo tersebut.
+### 1. Hubungkan repo ini ke Cloudflare
+1. Buka dash.cloudflare.com, lalu masuk ke **Workers & Pages → Create → Import a repository**.
+2. Pilih repo ini.
+3. Isi pengaturan build:
+   - Build command: `npm run build`
+   - Deploy command: `npm run deploy`
+4. Klik Deploy.
 
-### 2. Buat KV untuk dashboard
-1. Buka dash.cloudflare.com, lalu masuk ke **Storage & Databases → KV → Create**.
-2. Beri nama `kantor-bos-data`.
-3. Salin **ID**-nya, lalu tempel di `wrangler.jsonc` menggantikan `GANTI_DENGAN_ID_KV`. Commit perubahannya.
+KV `DASH_KV` dibuat otomatis saat deploy pertama. Setiap push ke `main` akan men-deploy ulang.
 
-### 3. Hubungkan repo ke Cloudflare
-1. Masuk ke **Workers & Pages → Create → Import a repository** (atau *Connect to Git*).
-2. Pilih repo `kantor-bos`.
-3. Isi *Deploy command* dengan `npx wrangler deploy`, lalu klik Deploy.
+> Kalau deploy gagal karena KV belum ada: buat KV di **Storage & Databases → KV → Create**, lalu isi ID-nya di `cloudflare.config.ts` (`DASH_KV: bindings.kv({ id: "..." })`).
 
-Mulai sekarang, setiap push ke repo ini otomatis men-deploy ulang dashboard.
+### 2. Buat token
 
-### 4. Buat token
-
-**Token GitHub** (github.com → Settings → Developer settings → *Fine-grained tokens* → Generate):
-- Repository access: pilih repo-repo proyekmu (atau *All repositories*).
+**GitHub** (Settings → Developer settings → *Fine-grained tokens*):
+- Pilih repo-repo proyekmu.
 - Permissions:
-  - **Contents**: Read and write
-  - **Workflows**: Read and write
+  - **Contents**: Read & write
+  - **Workflows**: Read & write
   - **Actions**: Read
   - **Metadata**: Read
 
-**Token Cloudflare** (dash.cloudflare.com → My Profile → API Tokens → Create Token → *Custom token*). Beri izin tingkat Account berikut:
+**Cloudflare** (My Profile → API Tokens → Custom token). Beri izin tingkat Account berikut:
 - **Workers KV Storage**: Edit
 - **D1**: Edit
 - **Cloudflare Pages**: Read
 
-**Account ID**: ada di halaman Overview akun Cloudflare (kolom kanan).
+**Account ID**: ada di halaman Overview akun Cloudflare.
 
-### 5. Simpan secret
-Buka Worker `kantor-bos`, lalu masuk ke **Settings → Variables and Secrets → Add** dan tambahkan yang berikut sebagai tipe **Secret**:
+### 3. Isi secret
+Buka Worker `kantor-bos`, lalu masuk ke **Settings → Variables and Secrets** dan tambahkan sebagai tipe **Secret**:
 
 | Nama | Isi |
 |---|---|
-| `DASHBOARD_PASSWORD` | password untuk masuk dashboard (buat yang kuat) |
-| `SESSION_SECRET` | teks acak panjang, misalnya 40 karakter campur |
-| `GITHUB_TOKEN` | token GitHub dari langkah 4 |
-| `CF_API_TOKEN` | token Cloudflare dari langkah 4 |
+| `DASHBOARD_PASSWORD` | password masuk (buat yang kuat) |
+| `SESSION_SECRET` | teks acak panjang (±40 karakter) |
+| `GITHUB_TOKEN` | token GitHub |
+| `CF_API_TOKEN` | token Cloudflare |
 | `CF_ACCOUNT_ID` | Account ID |
 
-### 6. (Disarankan) Kunci lapis kedua
-Di Worker → **Settings → Domains & Routes**, aktifkan **Cloudflare Access** untuk alamat `workers.dev` dan izinkan hanya email kamu. Jadi selain password, kamu juga harus login lewat email.
+### 4. (Disarankan) Kunci lapis kedua
+Aktifkan **Cloudflare Access** untuk alamat `workers.dev` di Worker → Settings → Domains & Routes, dan izinkan hanya email kamu.
 
-### 7. Pakai
-- Buka `https://kantor-bos.<akunmu>.workers.dev`, lalu login.
-- Buka menu **Atur**, cek koneksi, lalu klik **+ Proyek** untuk setiap repo.
+### 5. Main!
+- Buka `https://kantor-bos.<akunmu>.workers.dev` dan login.
+- Masuk ke menu **Atur → + Rekrut** dan tambahkan satu karyawan untuk setiap repo.
 - Di HP: buka menu browser, lalu pilih **Tambahkan ke layar utama**.
-- Di menu **Jadwal**, isi tanggal semester selesai, lalu klik **Tambah ke kalender**. Buka file `.ics` yang terunduh, dan alarm 15 menit sebelum setiap kelas akan masuk ke kalender HP.
 
 ---
-
-## Cara kerja upload zip
-1. Zip dibongkar **di browser**.
-2. Beberapa hal otomatis dilewati: `node_modules`, `.git`, `__MACOSX`, `.DS_Store`, serta file rahasia `.env` dan `.dev.vars` supaya tidak bocor ke GitHub.
-3. Kalau semua file ada di dalam satu folder pembungkus, folder itu otomatis dilepas.
-4. SHA setiap file dibandingkan dengan isi repo, jadi **hanya file yang berubah** yang di-upload (per batch 40 file, aman untuk batas paket gratis Workers).
-5. Ada dua mode:
-   - **Ganti semua**: zip dianggap proyek lengkap, jadi file di repo yang tidak ada di zip akan dihapus. Folder `.github` tetap dipertahankan kalau zip tidak membawanya.
-   - **Tambah/timpa**: hanya file di zip yang diubah, file lain tetap.
-6. Satu commit dibuat, lalu Cloudflare (lewat Git integration atau GitHub Actions di proyek itu) deploy otomatis.
-
-> Status di kantor akan akurat kalau proyek memakai **GitHub Actions** atau kolom *Nama proyek Cloudflare Pages* diisi.
-
-## Struktur
-```
-src/index.js       router + login + ringkasan status kantor
-src/auth.js        password, cookie sesi (HMAC), batas percobaan login
-src/github.js      push via Git Data API (blob → tree → commit → ref)
-src/cloudflare.js  API KV, D1, Pages
-src/store.js       data dashboard di KV: proyek, riwayat, jadwal kuliah
-public/            tampilan (app.js, office.js = kantor pixel, sw.js = PWA)
-```
 
 ## Coba di komputer
 ```bash
 npm install
 printf 'DASHBOARD_PASSWORD=rahasia\nSESSION_SECRET=acak-panjang\n' > .dev.vars
-npx wrangler dev
+npm run dev
 ```
-Tambahkan `?demo=1` di URL untuk melihat kantor dengan karyawan contoh.
+Buka `/?demo=1` untuk melihat kantor penuh karyawan contoh.
 
-## Rencana pengembangan
-- Push notification asli (Web Push + Cron Trigger), supaya pengingat kuliah tetap muncul walau dashboard tertutup.
-- Gaji/XP karyawan dari jumlah deploy sukses, level kantor naik, dekorasi bisa dibeli.
-- Karyawan bisa jalan ke water cooler saat idle, dan boss bisa "menegur" karyawan yang gagal.
+## Struktur
+```
+app/(game)/          halaman game (dikunci login): Kantor, Jadwal, Upload, Data, Log, Atur
+app/login/           layar judul / login
+app/api/[...path]/   semua API (route handler)
+components/          UI React (GameShell = HUD + hotbar, *Screen = tiap halaman)
+lib/office/          mesin kantor pixel (engine.js) + font pixel
+lib/server/          login, push GitHub, API KV/D1/Pages, penyimpanan
+cloudflare.config.ts konfigurasi Worker + binding KV + secret
+```
+
+## Ide berikutnya
+- Notifikasi push asli untuk jadwal kuliah (Web Push + Cron), supaya tetap muncul walau aplikasi tertutup.
+- Toko dekorasi kantor, dibeli pakai koin dari push.
+- Karyawan naik jabatan setelah X deploy sukses.
 - Tombol rollback ke commit sebelumnya.
