@@ -60,8 +60,9 @@ export function sfx(kind: 'click' | 'open' | 'success' | 'error' | 'coin' | 'tab
   } catch {}
 }
 
-// ---------- waktu Jepang ----------
-export const HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+// ---------- waktu Jepang & jadwal (logika bersama di lib/kuliah.js) ----------
+export { HARI, fmtDur, toMin } from './kuliah.js';
+import { HARI as _H, toMin, occKey, addDays, jstDate, dayOf } from './kuliah.js';
 export const pad = (n: number) => String(n).padStart(2, '0');
 export function jstNow() {
   const d = new Date(Date.now() + 9 * 3600_000);
@@ -75,47 +76,82 @@ export function timeAgo(t?: number) {
   if (s < 86400) return `${Math.floor(s / 3600)} jam lalu`;
   return `${Math.floor(s / 86400)} hari lalu`;
 }
-
-// ---------- jadwal ----------
 export type Kelas = { id?: string; name: string; day: number; start: string; end: string; code?: string; kelas?: string; link?: string; note?: string };
-export const toMin = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
-export const durOf = (c: Kelas) => ((toMin(c.end) - toMin(c.start) + 1440) % 1440) || 1440;
+export const durOf = (c: Kelas) => {
+  const t = (x: string) => { const [h, m] = x.split(':').map(Number); return h * 60 + m; };
+  return ((t(c.end) - t(c.start) + 1440) % 1440) || 1440;
+};
+void _H;
 
-export function timeline(list: Kelas[]) {
-  const n = jstNow();
-  const nowW = n.day * 1440 + n.min + n.sec / 60;
-  return list.map((c) => {
-    const startW = c.day * 1440 + toMin(c.start);
-    const since = (nowW - startW + 10080) % 10080;
-    return { ...c, ongoing: since < durOf(c), until: (startW - nowW + 10080) % 10080, left: durOf(c) - since };
-  });
+// ---------- notifikasi push ----------
+function keyToBytes(b64: string) {
+  const s = b64.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(s + '==='.slice((s.length + 3) % 4));
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+export function pushSupported() {
+  return typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+export async function currentPushSub() {
+  if (!pushSupported()) return null;
+  const reg = await navigator.serviceWorker.getRegistration();
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+export async function enablePush() {
+  if (!pushSupported()) throw new Error('Browser ini belum mendukung notifikasi push. Di iPhone: tambahkan ke Layar Utama dulu.');
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') throw new Error('Izin notifikasi ditolak. Aktifkan di pengaturan situs browser.');
+  const reg = (await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.register('/sw.js'));
+  await navigator.serviceWorker.ready;
+  const { publicKey } = await api('/push/key');
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyToBytes(publicKey) });
+  const ua = navigator.userAgent;
+  const label = /Android/i.test(ua) ? 'HP Android' : /iPhone|iPad/i.test(ua) ? 'iPhone/iPad' : /Windows/i.test(ua) ? 'PC Windows' : /Mac/i.test(ua) ? 'Mac' : 'Perangkat';
+  await api('/push/subscribe', { method: 'POST', body: { subscription: sub.toJSON(), label } });
+  return sub;
+}
+export async function disablePush() {
+  const sub = await currentPushSub();
+  if (!sub) return;
+  await api('/push/unsubscribe', { method: 'POST', body: { endpoint: sub.endpoint } }).catch(() => {});
+  await sub.unsubscribe();
 }
 
-export function fmtDur(min: number) {
-  min = Math.max(0, Math.round(min));
-  const d = Math.floor(min / 1440), h = Math.floor((min % 1440) / 60), m = min % 60;
-  return [d && `${d} hari`, h && `${h} jam`, `${m} menit`].filter(Boolean).join(' ');
-}
-
-/** Buat file .ics: acara mingguan + alarm 15 menit sebelum mulai. */
-export function downloadIcs(list: Kelas[], until: string) {
-  const n = jstNow();
+/** Buat file .ics: acara mingguan + kuliah tambahan, tanggal libur dikecualikan, alarm 15 menit. */
+export function downloadIcs(data: any, until: string) {
+  const list: Kelas[] = data.schedule || [];
+  const sem = data.semester || {};
+  const occ = data.occ || {};
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
-  const fmt = (d: Date) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00`;
-  const untilRule = until ? `;UNTIL=${until.replace(/-/g, '')}T145959Z` : '';
+  const ymd = (d: string) => d.replace(/-/g, '');
+  const hm = (t: string) => t.replace(':', '') + '00';
+  const endOf = (date: string, start: string, end: string) => {
+    const mins = toMin(start) + (((toMin(end) - toMin(start) + 1440) % 1440) || 1440);
+    return `${ymd(addDays(date, Math.floor(mins / 1440)))}T${pad(Math.floor((mins % 1440) / 60))}${pad(mins % 60)}00`;
+  };
+  const untilDate = until || sem.end || '';
   const e = (s: string) => String(s).replace(/[\\;,]/g, (m) => '\\' + m).replace(/\n/g, '\\n');
   const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Kantor Bos//Jadwal Kuliah//ID', 'CALSCALE:GREGORIAN',
     'BEGIN:VTIMEZONE', 'TZID:Asia/Tokyo', 'BEGIN:STANDARD', 'DTSTART:19700101T000000', 'TZOFFSETFROM:+0900', 'TZOFFSETTO:+0900', 'TZNAME:JST', 'END:STANDARD', 'END:VTIMEZONE'];
+  const alarm = (name: string) => ['BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${e(name)} 15 menit lagi`, 'TRIGGER:-PT15M', 'END:VALARM'];
+  const from = sem.start && sem.start > jstDate() ? sem.start : jstDate();
   for (const c of list) {
-    const base = Date.UTC(n.date.getUTCFullYear(), n.date.getUTCMonth(), n.date.getUTCDate());
-    const start = new Date(base + ((c.day - n.day + 7) % 7) * 86400_000 + toMin(c.start) * 60_000);
-    const end = new Date(start.getTime() + durOf(c) * 60_000);
-    L.push('BEGIN:VEVENT', `UID:${c.id}-${c.day}${c.start.replace(':', '')}@kantor-bos`, `DTSTAMP:${stamp}`,
-      `DTSTART;TZID=Asia/Tokyo:${fmt(start)}`, `DTEND;TZID=Asia/Tokyo:${fmt(end)}`, `RRULE:FREQ=WEEKLY${untilRule}`,
+    const first = addDays(from, (c.day - dayOf(from) + 7) % 7);
+    const libur = Object.entries(occ).filter(([k, v]: any) => k.endsWith(`|${c.id}`) && v.status === 'libur').map(([k]) => k.split('|')[0]);
+    L.push('BEGIN:VEVENT', `UID:${c.id}-w@kantor-bos`, `DTSTAMP:${stamp}`,
+      `DTSTART;TZID=Asia/Tokyo:${ymd(first)}T${hm(c.start)}`, `DTEND;TZID=Asia/Tokyo:${endOf(first, c.start, c.end)}`,
+      `RRULE:FREQ=WEEKLY${untilDate ? `;UNTIL=${ymd(untilDate)}T145959Z` : ''}`,
+      ...libur.map((d) => `EXDATE;TZID=Asia/Tokyo:${ymd(d)}T${hm(c.start)}`),
       `SUMMARY:${e(c.name)}`,
       `DESCRIPTION:${e([c.kelas && 'Kelas ' + c.kelas, c.code && 'Kode ' + c.code, c.link, c.note].filter(Boolean).join(' · '))}`,
-      ...(c.link ? [`URL:${c.link}`] : []),
-      'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${e(c.name)} 15 menit lagi`, 'TRIGGER:-PT15M', 'END:VALARM', 'END:VEVENT');
+      ...(c.link ? [`URL:${c.link}`] : []), ...alarm(c.name), 'END:VEVENT');
+  }
+  for (const x of data.extras || []) {
+    if (x.date < jstDate() || occ[occKey(x.date, x.id)]?.status === 'libur') continue;
+    L.push('BEGIN:VEVENT', `UID:${x.id}@kantor-bos`, `DTSTAMP:${stamp}`,
+      `DTSTART;TZID=Asia/Tokyo:${ymd(x.date)}T${hm(x.start)}`, `DTEND;TZID=Asia/Tokyo:${endOf(x.date, x.start, x.end)}`,
+      `SUMMARY:${e(x.name + ' (tambahan)')}`, ...(x.link ? [`URL:${x.link}`] : []), ...alarm(x.name), 'END:VEVENT');
   }
   L.push('END:VCALENDAR');
   const a = document.createElement('a');

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
-import { api, sfx, soundOn, setSound, jstNow, HARI, pad, timeline } from '@/lib/client';
+import { api, sfx, soundOn, setSound, jstNow, HARI, pad } from '@/lib/client';
 
 const TABS = [
   { href: '/', label: 'Kantor', icon: 'office' },
@@ -40,30 +40,6 @@ export default function GameShell({ children }: { children: ReactNode }) {
     window.addEventListener('kb-toast', onToast);
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
     return () => { clearInterval(iv); window.removeEventListener('kb-toast', onToast); window.removeEventListener('kb-stats', load); };
-  }, []);
-
-  // Pengingat kuliah 15 menit sebelum mulai (selama aplikasi terbuka)
-  useEffect(() => {
-    const done = new Set<string>();
-    let list: any[] | null = null;
-    const check = async () => {
-      try {
-        if (localStorage.getItem('kb_remind') !== '1' || Notification.permission !== 'granted') return;
-        list = list || (await api('/schedule'));
-        for (const c of timeline(list)) {
-          const key = `${c.id}-${new Date().toDateString()}`;
-          if (!c.ongoing && c.until <= 15 && !done.has(key)) {
-            done.add(key);
-            const reg = await navigator.serviceWorker?.getRegistration();
-            const opts = { body: `${HARI[c.day]} ${c.start}–${c.end} JST · mulai ${Math.ceil(c.until)} menit lagi`, icon: '/icons/icon-192.png', tag: key };
-            if (reg) reg.showNotification(`📚 ${c.name}`, opts); else new Notification(`📚 ${c.name}`, opts);
-          }
-        }
-      } catch {}
-    };
-    const iv = setInterval(check, 30_000);
-    check();
-    return () => clearInterval(iv);
   }, []);
 
   const active = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));

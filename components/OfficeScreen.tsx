@@ -2,7 +2,8 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { OfficeEngine } from '@/lib/office/engine.js';
-import { api, timeAgo, timeline, fmtDur, HARI, sfx } from '@/lib/client';
+import { api, timeAgo, sfx } from '@/lib/client';
+import { nowAndNext, fmtDur, HARI, dayOf, pendingSessions, taskDueTs } from '@/lib/kuliah.js';
 import { Btn, ErrorBox, Pill, Sheet } from './ui';
 
 function demoWorkers() {
@@ -30,11 +31,16 @@ export default function OfficeScreen() {
   const [picked, setPicked] = useState<any>(null);
   const [logs, setLogs] = useState<Log[]>([]);
   const [next, setNext] = useState<any>(null);
+  const [report, setReport] = useState<any>(null);
+  const [showReport, setShowReport] = useState(true);
 
   useEffect(() => {
     const demo = new URLSearchParams(location.search).has('demo');
     const eng = new OfficeEngine(canvas.current!, {
-      onPick: (data: any, activity: string | null) => { sfx('open'); setPicked({ ...data, activity }); },
+      onPick: (data: any, activity: string | null) => {
+        if (data?.secretary) { sfx('open'); location.href = '/jadwal'; return; }
+        sfx('open'); setPicked({ ...data, activity });
+      },
       onEvent: (text: string) => setLogs((l) => [{ id: Math.random(), text, t: Date.now() }, ...l].slice(0, 6)),
     });
     engine.current = eng;
@@ -46,19 +52,28 @@ export default function OfficeScreen() {
         const d = demo ? { workers: demoWorkers(), stats: { level: 3 } } : await api('/office');
         setWorkers(d.workers); setStats(d.stats); setErr(null);
         eng.setLevel(d.stats?.level || 1);
+        if (demo) eng.setSecretaryAlerts(['Bos, 20 menit lagi kuliah Bahasa Jepang Bisnis!', 'Bos, ada 1 tugas lewat tenggat!']);
         eng.setWorkers(d.workers);
       } catch (e) { setErr(e); setWorkers((w) => w || []); }
     };
     load();
     const iv = setInterval(() => document.visibilityState === 'visible' && load(), 60_000);
 
-    const loadNext = () => api('/schedule').then((list) => {
-      const tl = timeline(list);
-      const now = tl.find((c) => c.ongoing);
-      setNext(now ? { ...now, live: true } : [...tl].sort((a, b) => a.until - b.until)[0] || null);
+    const loadNext = () => Promise.all([api('/kuliah'), api('/report')]).then(([k, r]) => {
+      const { current, next } = nowAndNext(k);
+      setNext(current ? { ...current, live: true } : next);
+      setReport(r);
+      // Sekretaris punya kabar untuk Bos?
+      const alerts: string[] = [];
+      const now = Date.now();
+      if (current) alerts.push(`Bos, kuliah ${current.name} sedang berlangsung!`);
+      else if (next && next.startTs - now < 60 * 60_000) alerts.push(`Bos, ${Math.ceil((next.startTs - now) / 60000)} menit lagi kuliah ${next.name}!`);
+      const late = k.tasks.filter((t: any) => !t.done && t.due && taskDueTs(t) < now).length;
+      if (late) alerts.push(`Bos, ada ${late} tugas lewat tenggat!`);
+      const pend = pendingSessions(k, 7).length;
+      if (pend) alerts.push(`Bos, ${pend} sesi kuliah belum dicentang.`);
+      eng.setSecretaryAlerts(alerts);
     }).catch(() => {});
-    if (!demo) loadNext();
-    const iv2 = setInterval(loadNext, 60_000);
     return () => { eng.destroy(); ro.disconnect(); clearInterval(iv); clearInterval(iv2); };
   }, []);
 
@@ -69,8 +84,23 @@ export default function OfficeScreen() {
       {next && (
         <Link href="/jadwal" className={`quest-banner ${next.live ? 'live' : ''}`}>
           <span className="qb-tag">{next.live ? '● KULIAH' : 'BERIKUTNYA'}</span>
-          <span className="qb-text"><b>{next.name}</b> · {next.live ? `sisa ${fmtDur(next.left)}` : `${HARI[next.day]} ${next.start} · ${fmtDur(next.until)} lagi`}</span>
+          <span className="qb-text"><b>{next.name}</b> · {next.live ? `sisa ${fmtDur((next.endTs - Date.now()) / 60000)}` : `${HARI[dayOf(next.date)]} ${next.start} · ${fmtDur((next.startTs - Date.now()) / 60000)} lagi`}</span>
         </Link>
+      )}
+
+      {report && (
+        <section className={`report ${showReport ? '' : 'mini'}`}>
+          <button className="report-head" onClick={() => { sfx('click'); setShowReport(!showReport); }} aria-expanded={showReport}>
+            <img src="/icons/icon-192.png" alt="" width={28} height={28} className="pix" />
+            <span>LAPORAN BOS · {report.day.toUpperCase()}</span>
+            <span className="report-toggle">{showReport ? '▲' : '▼'}</span>
+          </button>
+          {showReport && (
+            <ul className="report-list">
+              {report.lines.map((l: string, i: number) => <li key={i}>{l}</li>)}
+            </ul>
+          )}
+        </section>
       )}
 
       <div className="chips-row">

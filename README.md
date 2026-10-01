@@ -26,6 +26,30 @@
 
 ---
 
+## Fitur v3
+- **Notifikasi push asli**. Muncul di HP walau aplikasi tertutup, dikirim oleh Cron Trigger setiap 5 menit:
+  - pengingat kuliah (5–60 menit sebelum mulai)
+  - tenggat tugas
+  - laporan pagi Bos
+  - kabar deploy sukses atau gagal
+
+  Cara mengaktifkan: **Atur → Notifikasi → Aktifkan di perangkat ini**. Di iPhone, tambahkan dulu ke Layar Utama.
+- **Rollback**. Di menu Log ada daftar 10 commit terakhir dengan tombol **↺ Kembalikan**. Rollback membuat commit baru, jadi riwayat tetap aman.
+- **Laporan Bos** di layar Kantor: kuliah hari ini, tugas mendekati tenggat, sesi yang belum dicentang, dan proyek yang gagal deploy.
+- **Sekretaris Yuki**. Di layar Jadwal, dia memberi kabar kuliah dan tugas. Di kantor pixel, dia berjalan ke meja Bos untuk melapor kalau ada yang penting. Ketuk Yuki untuk membuka Jadwal.
+- **Jadwal kuliah** dengan 3 tab:
+  - **Minggu**: daftar kelas, pertemuan ke berapa, progres sesi, dan pengaturan semester
+  - **Kalender**: tampilan per bulan. Ketuk tanggal untuk menandai sesi *Ada kuliah*, *✓ Selesai*, atau *Libur*, dan untuk menambah kuliah tambahan atau pengganti
+  - **Tugas**: to-do tugas dengan tenggat, plus daftar sesi yang belum dicentang
+- **Proyek Worker atau Pages**. Status deploy dibaca dari Cloudflare sesuai jenis proyeknya.
+- **Upload aman**. Ada pratinjau file yang ditambah atau dihapus sebelum push, folder pembungkus hanya dilepas 1 lapis, dan kamu bisa memilih folder tujuan.
+
+### Izin token tambahan
+| Token | Izin |
+|---|---|
+| GitHub (fine-grained) | Contents: Read & write · Workflows: Read & write · Actions: Read · Metadata: Read |
+| Cloudflare (User API Token) | Workers KV Storage: Edit · D1: Edit · Cloudflare Pages: Read · **Workers Scripts: Read** · **Workers Builds Configuration: Read** (untuk status proyek Worker) |
+
 ## Setup (cukup sekali)
 
 ### 1. Hubungkan repo ini ke Cloudflare
@@ -89,17 +113,20 @@ Buka `/?demo=1` untuk melihat kantor penuh karyawan contoh.
 
 ## Struktur
 ```
+worker/index.js      entry Worker: halaman (vinext) + handler cron
+lib/kuliah.js        logika jadwal (sesi, libur, kuliah tambahan) dipakai server & browser
 app/(game)/          halaman game (dikunci login): Kantor, Jadwal, Upload, Data, Log, Atur
 app/login/           layar judul / login
 app/api/[...path]/   semua API (route handler)
 components/          UI React (GameShell = HUD + hotbar, *Screen = tiap halaman)
 lib/office/          mesin kantor pixel (engine.js) + font pixel
-lib/server/          login, push GitHub, API KV/D1/Pages, penyimpanan
+lib/server/          login, push & rollback GitHub, API KV/D1/Pages/Workers, penyimpanan,
+                     webpush.js (VAPID + enkripsi), cron.js (pengingat & laporan pagi)
 cloudflare.config.ts konfigurasi Worker + binding KV + secret
 ```
 
 ## Ide berikutnya
-- Notifikasi push asli untuk jadwal kuliah (Web Push + Cron), supaya tetap muncul walau aplikasi tertutup.
 - Toko dekorasi kantor, dibeli pakai koin dari push.
 - Karyawan naik jabatan setelah X deploy sukses.
-- Tombol rollback ke commit sebelumnya.
+- Belajar JLPT (flashcard + SRS) yang memberi XP.
+- Rekap nilai & IPK.

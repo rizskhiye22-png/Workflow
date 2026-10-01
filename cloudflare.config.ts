@@ -1,13 +1,15 @@
-import { bindings, defineConfig, defineWorker } from "cf/config";
+import { bindings, defineConfig, defineWorker, triggers } from "cf/config";
 
 export default defineConfig({
   worker: defineWorker({
     name: "kantor-bos",
-    entrypoint: "vinext/server/fetch-handler",
+    entrypoint: "./worker/index.js",
     compatibilityDate: "2026-09-01",
     compatibilityFlags: ["nodejs_compat"],
     assets: { notFoundHandling: "none" },
     observability: { enabled: true },
+    // Tiap 5 menit: pengingat kuliah/tugas, notifikasi deploy, laporan pagi
+    triggers: [triggers.scheduled({ schedule: "*/5 * * * *" })],
     env: {
       ASSETS: bindings.assets(),
       // KV untuk data dashboard (proyek, riwayat, jadwal). Dibuat otomatis saat deploy.

@@ -19,6 +19,8 @@
     "not_found_handling": "none"
   },
   "observability": { "enabled": true },
+  // Tiap 5 menit: pengingat kuliah/tugas, notifikasi deploy, laporan pagi
+  "triggers": { "crons": ["*/5 * * * *"] },
   // KV untuk data dashboard — dibuat otomatis saat deploy pertama
   "kv_namespaces": [{ "binding": "DASH_KV" }]
   // Secret diisi di dashboard Cloudflare (Settings → Variables and Secrets):

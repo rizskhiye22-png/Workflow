@@ -1,8 +1,8 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { api, timeAgo } from '@/lib/client';
-import { ErrorBox, Field, Loading, Panel, Pill } from './ui';
+import { api, timeAgo, toast } from '@/lib/client';
+import { Btn, ErrorBox, Field, Loading, Panel, Pill } from './ui';
 
 const runStatus = (r: any) => (r.status !== 'completed' ? 'building' : ['success', 'skipped', 'neutral'].includes(r.conclusion) ? 'success' : 'failed');
 
@@ -29,11 +29,22 @@ export default function HistoryScreen() {
       setPid(p.find((x: any) => x.id === want)?.id || p[0]?.id || '');
     }).catch(setErr);
   }, []);
+  const [rolling, setRolling] = useState('');
+  const load = () => api(`/projects/${encodeURIComponent(pid)}/history`).then(setH).catch(setErr);
   useEffect(() => {
     if (!pid) return;
     setH(null);
-    api(`/projects/${encodeURIComponent(pid)}/history`).then(setH).catch(setErr);
-  }, [pid]);
+    load();
+  }, [pid]); // eslint-disable-line
+  const rollback = async (c: any) => {
+    if (!confirm(`Kembalikan proyek ke versi ini?\n\n"${c.message}"\n\nIni membuat commit baru (riwayat tetap aman, bisa dibatalkan dengan rollback lagi). Situs akan deploy ulang otomatis.`)) return;
+    setRolling(c.sha);
+    try {
+      const r = await api('/rollback', { method: 'POST', body: { projectId: pid, sha: c.sha } });
+      toast(r.unchanged ? 'Isinya sudah sama dengan versi itu' : 'Rollback berhasil! Situs deploy ulang…', 'ok');
+      await load();
+    } catch (e: any) { toast(e.message, 'bad'); } finally { setRolling(''); }
+  };
 
   if (err) return <ErrorBox error={err} />;
   if (!projects) return <Loading />;
@@ -48,13 +59,23 @@ export default function HistoryScreen() {
         {!h ? <Loading /> : (
           <>
             {h.error && <ErrorBox error={h.error} />}
+            <h3 className="sub">Versi (commit terakhir)</h3>
+            <ul className="logs">
+              {h.commits?.length ? h.commits.map((c: any, i: number) => (
+                <li key={c.sha} className="log-row">
+                  <div><b>{c.message || '(tanpa pesan)'}</b><small>{c.sha.slice(0, 7)} · {timeAgo(Date.parse(c.date))}</small></div>
+                  {i === 0 ? <span className="pill st-success">AKTIF</span>
+                    : <Btn variant="ghost" disabled={!!rolling} onClick={() => rollback(c)}>{rolling === c.sha ? '…' : '↺ Kembalikan'}</Btn>}
+                </li>
+              )) : <li className="muted pad">Belum ada commit / tidak bisa dibaca.</li>}
+            </ul>
             <h3 className="sub">Push dari dashboard</h3>
             <ul className="logs">{h.pushes.length ? h.pushes.map((p: any) => <Row key={p.sha} title={p.message} sub={`${timeAgo(p.time)} · ${p.sha.slice(0, 7)} · ${p.files} file`} url={p.url} />) : <li className="muted pad">Belum ada.</li>}</ul>
             <h3 className="sub">GitHub Actions</h3>
             <ul className="logs">{h.runs.length ? h.runs.map((r: any) => <Row key={r.id} title={r.title} sub={`${r.name} · ${timeAgo(Date.parse(r.created_at))}`} status={runStatus(r)} url={r.url} />) : <li className="muted pad">Tidak ada workflow run.</li>}</ul>
-            {h.project.pagesProject && (
+            {(h.project.pagesProject || h.project.workerName) && (
               <>
-                <h3 className="sub">Cloudflare Pages</h3>
+                <h3 className="sub">{h.project.workerName ? `Cloudflare Worker · ${h.project.workerName}` : 'Cloudflare Pages'}</h3>
                 <ul className="logs">{h.deployments.length ? h.deployments.map((d: any) => <Row key={d.id} title={d.message} sub={`${d.environment} · ${timeAgo(Date.parse(d.created_on))}`} status={d.status} url={d.url} />) : <li className="muted pad">Belum ada deployment.</li>}</ul>
               </>
             )}

@@ -42,6 +42,10 @@ export default function UploadScreen() {
   const [prog, setProg] = useState(0);
   const [lines, setLines] = useState<Line[]>([]);
   const [over, setOver] = useState(false);
+  const [unwrap, setUnwrap] = useState(true);
+  const [prefix, setPrefix] = useState('');
+  const [review, setReview] = useState<null | { changed: string[]; deleted: string[]; total: number }>(null);
+  const decide = useRef<((ok: boolean) => void) | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -76,10 +80,16 @@ export default function UploadScreen() {
         if (why) { skipped[why] = (skipped[why] || 0) + 1; continue; }
         files.push({ path, data });
       }
-      while (files.length && files.every((f) => f.path.includes('/') && f.path.split('/')[0] === files[0].path.split('/')[0])) {
+      if (unwrap && files.length && files.every((f) => f.path.includes('/') && f.path.split('/')[0] === files[0].path.split('/')[0])) {
         const root = files[0].path.split('/')[0] + '/';
         files = files.map((f) => ({ ...f, path: f.path.slice(root.length) }));
         log(`Folder pembungkus "${root}" dilepas`, 'muted');
+      }
+      const pre = prefix.trim().replace(/^\/+|\/+$/g, '');
+      if (pre) {
+        if (pre.split('/').some((x) => !x || x === '.' || x === '..')) throw new Error('Folder tujuan tidak valid');
+        files = files.map((f) => ({ ...f, path: `${pre}/${f.path}` }));
+        log(`File ditaruh di folder "${pre}/"`, 'muted');
       }
       if (!files.length) throw new Error('Zip kosong setelah disaring');
       for (const [why, n] of Object.entries(skipped)) log(`Dilewati ${n} file (${why})`, why === 'file rahasia' ? 'warn' : 'muted');
@@ -104,6 +114,12 @@ export default function UploadScreen() {
       const deleted = mode === 'replace' ? Object.keys(existing).filter((p) => !zipPaths.has(p) && !keptSet.has(p)) : [];
       log(`${changed.length} file berubah, ${deleted.length} file dihapus.`);
       if (!changed.length && !deleted.length) { setProg(1); log('Tidak ada perubahan.', 'ok'); toast('Tidak ada perubahan'); return; }
+      const ok = await new Promise<boolean>((resolve) => {
+        decide.current = resolve;
+        setReview({ changed: changed.map((f) => f.path), deleted, total: Object.keys(existing).length });
+      });
+      setReview(null);
+      if (!ok) { log('Dibatalkan. Repo tidak diubah.', 'warn'); setProg(0); return; }
 
       const batches: typeof files[] = [];
       let cur: typeof files = [], size = 0;
@@ -166,6 +182,14 @@ export default function UploadScreen() {
           <span className="chest-ico" aria-hidden />
           {file ? <span><b>{file.name}</b><br /><small>{fmtSize(file.size)} · ketuk untuk ganti</small></span> : <span>Ketuk untuk pilih file <b>.zip</b><br /><small>atau seret ke sini</small></span>}
         </label>
+        <Field label="Folder tujuan di repo" hint="(kosongkan = root repo)">
+          <input value={prefix} placeholder="contoh: public" onChange={(e) => setPrefix(e.target.value)} />
+        </Field>
+        <label className="toggle">
+          <input type="checkbox" checked={unwrap} onChange={(e) => setUnwrap(e.target.checked)} />
+          <span className="tg" aria-hidden />
+          <span>Lepas 1 folder pembungkus <small className="muted">(mis. zip berisi n1-cf/… → isinya saja)</small></span>
+        </label>
         <Field label="Pesan commit"><input value={msg} maxLength={200} placeholder="Update dari Kantor Bos" onChange={(e) => setMsg(e.target.value)} /></Field>
         <div className="mode-pick" role="radiogroup" aria-label="Mode">
           <button type="button" role="radio" aria-checked={mode === 'replace'} className={mode === 'replace' ? 'on' : ''} onClick={() => { sfx('click'); setMode('replace'); }}>
@@ -176,6 +200,25 @@ export default function UploadScreen() {
           </button>
         </div>
         <Btn variant="gold" block disabled={!file || busy} onClick={run}>{busy ? 'Mengirim…' : 'PUSH KE GITHUB ▶'}</Btn>
+        {review && (
+          <div className={`review ${review.deleted.length ? 'danger' : ''}`}>
+            <p className="review-title">PERIKSA SEBELUM PUSH</p>
+            <p><b>{review.changed.length}</b> file ditambah/diubah{review.deleted.length ? <> · <b className="bad">{review.deleted.length}</b> file DIHAPUS dari repo</> : ''}</p>
+            <ul className="review-list">
+              {review.changed.slice(0, 8).map((x) => <li key={'c' + x}>＋ {x}</li>)}
+              {review.changed.length > 8 && <li className="muted">…dan {review.changed.length - 8} lainnya</li>}
+              {review.deleted.slice(0, 6).map((x) => <li key={'d' + x} className="bad">－ {x}</li>)}
+              {review.deleted.length > 6 && <li className="bad">…dan {review.deleted.length - 6} lainnya dihapus</li>}
+            </ul>
+            {review.deleted.length > 0 && review.deleted.length >= review.total / 3 && (
+              <p className="bad small">⚠ Lebih dari sepertiga isi repo akan dihapus. Kalau zip ini cuma patch beberapa file, batalkan lalu pilih mode <b>Tambah / timpa</b>.</p>
+            )}
+            <div className="btn-row">
+              <Btn variant={review.deleted.length ? 'red' : 'gold'} onClick={() => decide.current?.(true)}>Lanjutkan push</Btn>
+              <Btn variant="ghost" onClick={() => decide.current?.(false)}>Batal</Btn>
+            </div>
+          </div>
+        )}
         {(busy || lines.length > 0) && (
           <>
             <div className="hpbar big"><div style={{ width: `${Math.round(prog * 100)}%` }} /></div>
