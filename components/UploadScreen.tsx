@@ -35,7 +35,10 @@ export default function UploadScreen() {
   const [projects, setProjects] = useState<any[] | null>(null);
   const [err, setErr] = useState<any>(null);
   const [pid, setPid] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [picked, setPicked] = useState<File[]>([]);
+  const isZip = picked.length === 1 && /\.zip$/i.test(picked[0].name);
+  const file = picked.length ? picked[0] : null;
+  const totalSize = picked.reduce((n, f) => n + f.size, 0);
   const [msg, setMsg] = useState('');
   const [mode, setMode] = useState<'replace' | 'merge'>('replace');
   const [busy, setBusy] = useState(false);
@@ -57,21 +60,34 @@ export default function UploadScreen() {
   }, []);
   useEffect(() => { logRef.current?.scrollTo(0, 1e9); }, [lines]);
 
-  const pick = (f?: File) => {
-    if (!f) return;
-    if (!/\.zip$/i.test(f.name)) return toast('Pilih file .zip', 'bad');
-    if (f.size > 95 * 1048576) return toast('Zip terlalu besar (maks ±95 MB)', 'bad');
+  const pick = (list?: FileList | null) => {
+    const arr = list ? Array.from(list) : [];
+    if (!arr.length) return;
+    const zips = arr.filter((f) => /\.zip$/i.test(f.name));
+    if (zips.length && arr.length > 1) return toast('Pilih satu .zip saja, atau beberapa file biasa (tanpa zip)', 'bad');
+    const size = arr.reduce((n, f) => n + f.size, 0);
+    if (size > 95 * 1048576) return toast('Terlalu besar (maks ±95 MB sekali upload). Bagi jadi beberapa kali.', 'bad');
+    if (arr.length > 200) return toast('Maks 200 file sekali upload', 'bad');
     sfx('coin');
-    setFile(f);
+    setPicked(arr);
+    if (!zips.length) { setMode('merge'); setUnwrap(false); }
   };
 
   async function run() {
-    if (!file || !pid) return;
+    if (!picked.length || !pid) return;
     const log = (t: string, c = '') => setLines((l) => [...l, { t, c }]);
     setBusy(true); setLines([]); setProg(0.03);
     try {
-      log('Membuka peti zip…');
-      const raw = unzipSync(new Uint8Array(await file.arrayBuffer()));
+      let raw: Record<string, Uint8Array>;
+      if (isZip) {
+        log('Membuka peti zip…');
+        raw = unzipSync(new Uint8Array(await file.arrayBuffer()));
+      } else {
+        if (!prefix.trim()) throw new Error('Isi "Folder tujuan di repo" dulu, contoh: public/media/audio/2019-07');
+        log(`Membaca ${picked.length} file…`);
+        raw = {};
+        for (const f of picked) raw[f.name] = new Uint8Array(await f.arrayBuffer());
+      }
       let files: { path: string; data: Uint8Array; sha?: string }[] = [];
       const skipped: Record<string, number> = {};
       for (const [path, data] of Object.entries(raw)) {
@@ -143,7 +159,7 @@ export default function UploadScreen() {
       log('Membuat commit…');
       const fin = await api('/push/finish', {
         method: 'POST',
-        body: { projectId: pid, message: msg.trim() || `Update dari Kantor Bos (${file.name})`, entries, base: mode === 'merge',
+        body: { projectId: pid, message: msg.trim() || `Update dari Kantor Bos (${isZip ? file!.name : `${picked.length} file → ${prefix.trim()}`})`, entries, base: mode === 'merge',
           parentSha: start.parentSha, parentTree: start.parentTree, newBranch: start.newBranch, changedCount: changed.length + deleted.length },
       });
       setProg(1);
@@ -160,7 +176,7 @@ export default function UploadScreen() {
   if (err) return <ErrorBox error={err} />;
   if (!projects) return <Loading />;
   if (!projects.length) return (
-    <Panel title="UPLOAD ZIP" icon="up">
+    <Panel title="UPLOAD" icon="up">
       <p className="muted">Belum ada proyek. Rekrut karyawan dulu di menu Atur.</p>
       <Link className="gbtn gbtn-gold" href="/atur"><span>+ Rekrut karyawan</span></Link>
     </Panel>
@@ -168,7 +184,7 @@ export default function UploadScreen() {
 
   return (
     <div className="screen">
-      <Panel title="UPLOAD ZIP" icon="up">
+      <Panel title="UPLOAD" icon="up">
         <Field label="Proyek">
           <select value={pid} onChange={(e) => setPid(e.target.value)}>
             {projects.map((p) => <option key={p.id} value={p.id}>{p.worker} · {p.name} — {p.owner}/{p.repo}</option>)}
@@ -177,14 +193,17 @@ export default function UploadScreen() {
         <label className={`chest ${over ? 'over' : ''} ${file ? 'has' : ''}`}
           onDragOver={(e) => { e.preventDefault(); setOver(true); }}
           onDragLeave={() => setOver(false)}
-          onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files[0]); }}>
-          <input type="file" accept=".zip,application/zip" hidden onChange={(e) => pick(e.target.files?.[0])} />
+          onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files); }}>
+          <input type="file" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ''; }} />
           <span className="chest-ico" aria-hidden />
-          {file ? <span><b>{file.name}</b><br /><small>{fmtSize(file.size)} · ketuk untuk ganti</small></span> : <span>Ketuk untuk pilih file <b>.zip</b><br /><small>atau seret ke sini</small></span>}
+          {picked.length ? (
+            <span><b>{isZip ? file!.name : `${picked.length} file (${picked.slice(0, 3).map((f) => f.name).join(', ')}${picked.length > 3 ? '…' : ''})`}</b><br /><small>{fmtSize(totalSize)} · ketuk untuk ganti</small></span>
+          ) : <span>Ketuk untuk pilih <b>.zip</b> atau file biasa<br /><small>mp3, gambar, html… bisa beberapa sekaligus</small></span>}
         </label>
         <Field label="Folder tujuan di repo" hint="(kosongkan = root repo)">
-          <input value={prefix} placeholder="contoh: public" onChange={(e) => setPrefix(e.target.value)} />
+          <input value={prefix} placeholder={isZip || !picked.length ? 'contoh: public' : 'contoh: public/media/audio/2019-07'} onChange={(e) => setPrefix(e.target.value)} />
         </Field>
+        {!isZip && picked.length > 0 && <p className="muted small">File biasa (bukan zip) wajib diberi folder tujuan. Mode otomatis <b>Tambah / timpa</b>.</p>}
         <label className="toggle">
           <input type="checkbox" checked={unwrap} onChange={(e) => setUnwrap(e.target.checked)} />
           <span className="tg" aria-hidden />
@@ -199,7 +218,7 @@ export default function UploadScreen() {
             <b>Tambah / timpa</b><small>Hanya file di zip yang diubah, sisanya tetap.</small>
           </button>
         </div>
-        <Btn variant="gold" block disabled={!file || busy} onClick={run}>{busy ? 'Mengirim…' : 'PUSH KE GITHUB ▶'}</Btn>
+        <Btn variant="gold" block disabled={!picked.length || busy} onClick={run}>{busy ? 'Mengirim…' : 'PUSH KE GITHUB ▶'}</Btn>
         {review && (
           <div className={`review ${review.deleted.length ? 'danger' : ''}`}>
             <p className="review-title">PERIKSA SEBELUM PUSH</p>
