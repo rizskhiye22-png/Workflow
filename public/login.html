@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Masuk · Kantor Bos</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#161a28">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="login-page">
+  <form class="card login-card" id="f">
+    <img src="/icons/icon-512.png" alt="" width="96" height="96" class="login-logo">
+    <h1 class="pixel">KANTOR BOS</h1>
+    <p class="muted">Selamat datang kembali, Bos. Masukkan password untuk masuk kantor.</p>
+    <label>Password
+      <input type="password" id="pw" autocomplete="current-password" required autofocus>
+    </label>
+    <button class="btn primary" type="submit" id="go">Masuk kantor</button>
+    <p class="err" id="err" role="alert"></p>
+  </form>
+  <script>
+    const f = document.getElementById('f'), err = document.getElementById('err'), go = document.getElementById('go');
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      err.textContent = ''; go.disabled = true; go.textContent = 'Membuka pintu…';
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: document.getElementById('pw').value }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(d.error || 'Gagal masuk');
+        location.replace('/');
+      } catch (x) {
+        err.textContent = x.message;
+        go.disabled = false; go.textContent = 'Masuk kantor';
+      }
+    });
+  </script>
+</body>
+</html>

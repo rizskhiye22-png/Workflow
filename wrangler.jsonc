@@ -1,0 +1,22 @@
+{
+  // Kantor Bos — dashboard pribadi untuk push proyek & kelola KV/D1
+  "name": "kantor-bos",
+  "main": "src/index.js",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // Semua request lewat Worker dulu, supaya halaman ikut terkunci password
+    "run_worker_first": true
+  },
+  "kv_namespaces": [
+    {
+      "binding": "DASH_KV",
+      // GANTI dengan ID namespace KV "kantor-bos-data" (lihat README langkah 2)
+      "id": "GANTI_DENGAN_ID_KV"
+    }
+  ],
+  "observability": { "enabled": true }
+  // Secret (diatur di dashboard Cloudflare, JANGAN ditulis di sini):
+  // DASHBOARD_PASSWORD, SESSION_SECRET, GITHUB_TOKEN, CF_API_TOKEN, CF_ACCOUNT_ID
+}
