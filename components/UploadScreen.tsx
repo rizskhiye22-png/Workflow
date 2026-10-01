@@ -1,33 +1,9 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { unzipSync } from 'fflate';
+import { readFiles, pushFiles, fmtSize } from '@/lib/pushflow';
 import { api, toast, sfx } from '@/lib/client';
 import { Btn, Field, Loading, Panel, ErrorBox } from './ui';
-
-const SKIP_DIRS = new Set(['node_modules', '.git', '__MACOSX', '.wrangler', '.next', '.vercel', 'dist-ssr']);
-const SECRET = /^(\.env(\..+)?|\.dev\.vars)$/;
-function skipReason(path: string) {
-  const parts = path.split('/');
-  if (parts.some((p) => SKIP_DIRS.has(p))) return 'folder diabaikan';
-  const base = parts[parts.length - 1];
-  if (base === '.DS_Store' || base === 'Thumbs.db') return 'sampah sistem';
-  if (SECRET.test(base) && !/\.(example|sample)$/.test(base)) return 'file rahasia';
-  return null;
-}
-async function gitSha(data: Uint8Array) {
-  const head = new TextEncoder().encode(`blob ${data.length}\0`);
-  const all = new Uint8Array(head.length + data.length);
-  all.set(head); all.set(data, head.length);
-  const h = await crypto.subtle.digest('SHA-1', all);
-  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-function toB64(u8: Uint8Array) {
-  let s = '';
-  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000) as any);
-  return btoa(s);
-}
-const fmtSize = (b: number) => (b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.ceil(b / 1024)} KB`);
 
 type Line = { t: string; c?: string; href?: string };
 
@@ -78,95 +54,21 @@ export default function UploadScreen() {
     const log = (t: string, c = '') => setLines((l) => [...l, { t, c }]);
     setBusy(true); setLines([]); setProg(0.03);
     try {
-      let raw: Record<string, Uint8Array>;
-      if (isZip) {
-        log('Membuka peti zip…');
-        raw = unzipSync(new Uint8Array(await file.arrayBuffer()));
-      } else {
-        if (!prefix.trim()) throw new Error('Isi "Folder tujuan di repo" dulu, contoh: public/media/audio/2019-07');
-        log(`Membaca ${picked.length} file…`);
-        raw = {};
-        for (const f of picked) raw[f.name] = new Uint8Array(await f.arrayBuffer());
-      }
-      let files: { path: string; data: Uint8Array; sha?: string }[] = [];
-      const skipped: Record<string, number> = {};
-      for (const [path, data] of Object.entries(raw)) {
-        if (path.endsWith('/')) continue;
-        const why = skipReason(path);
-        if (why) { skipped[why] = (skipped[why] || 0) + 1; continue; }
-        files.push({ path, data });
-      }
-      if (unwrap && files.length && files.every((f) => f.path.includes('/') && f.path.split('/')[0] === files[0].path.split('/')[0])) {
-        const root = files[0].path.split('/')[0] + '/';
-        files = files.map((f) => ({ ...f, path: f.path.slice(root.length) }));
-        log(`Folder pembungkus "${root}" dilepas`, 'muted');
-      }
-      const pre = prefix.trim().replace(/^\/+|\/+$/g, '');
-      if (pre) {
-        if (pre.split('/').some((x) => !x || x === '.' || x === '..')) throw new Error('Folder tujuan tidak valid');
-        files = files.map((f) => ({ ...f, path: `${pre}/${f.path}` }));
-        log(`File ditaruh di folder "${pre}/"`, 'muted');
-      }
-      if (!files.length) throw new Error('Zip kosong setelah disaring');
-      for (const [why, n] of Object.entries(skipped)) log(`Dilewati ${n} file (${why})`, why === 'file rahasia' ? 'warn' : 'muted');
-      if (skipped['file rahasia']) log('File .env/.dev.vars tidak di-push supaya rahasia aman.', 'warn');
-      const big = files.find((f) => f.data.length > 50 * 1048576);
-      if (big) throw new Error(`${big.path} lebih dari 50 MB — ditolak GitHub`);
-      log(`${files.length} file siap.`);
+      const files = await readFiles(picked, { unwrap, prefix }, log);
       setProg(0.1);
-
-      log('Menghubungi GitHub…');
-      const start = await api('/push/start', { method: 'POST', body: { projectId: pid } });
-      if (start.newBranch) log(`Branch "${start.branch}" akan dibuat.`);
-      for (const f of files) f.sha = await gitSha(f.data);
-      setProg(0.2);
-
-      const existing = start.tree as Record<string, { sha: string; mode: string }>;
-      const changed = files.filter((f) => existing[f.path]?.sha !== f.sha);
-      const zipPaths = new Set(files.map((f) => f.path));
-      const zipHasGithub = files.some((f) => f.path.startsWith('.github/'));
-      const kept = Object.entries(existing).filter(([p]) => !zipPaths.has(p) && p.startsWith('.github/') && !zipHasGithub);
-      const keptSet = new Set(kept.map(([p]) => p));
-      const deleted = mode === 'replace' ? Object.keys(existing).filter((p) => !zipPaths.has(p) && !keptSet.has(p)) : [];
-      log(`${changed.length} file berubah, ${deleted.length} file dihapus.`);
-      if (!changed.length && !deleted.length) { setProg(1); log('Tidak ada perubahan.', 'ok'); toast('Tidak ada perubahan'); return; }
-      const ok = await new Promise<boolean>((resolve) => {
-        decide.current = resolve;
-        setReview({ changed: changed.map((f) => f.path), deleted, total: Object.keys(existing).length });
+      const fin: any = await pushFiles(pid, files, {
+        mode,
+        message: msg.trim() || `Update dari Kantor Bos (${isZip ? file!.name : `${picked.length} file → ${prefix.trim()}`})`,
+        log, progress: setProg,
+        confirm: (r) => new Promise<boolean>((resolve) => {
+          decide.current = (ok) => { setReview(null); resolve(ok); };
+          setReview(r);
+        }),
       });
-      setReview(null);
-      if (!ok) { log('Dibatalkan. Repo tidak diubah.', 'warn'); setProg(0); return; }
-
-      const batches: typeof files[] = [];
-      let cur: typeof files = [], size = 0;
-      for (const f of changed) {
-        if (cur.length && (cur.length >= 40 || size + f.data.length > 12 * 1048576)) { batches.push(cur); cur = []; size = 0; }
-        cur.push(f); size += f.data.length;
-      }
-      if (cur.length) batches.push(cur);
-      let done = 0;
-      for (const b of batches) {
-        const res = await api('/push/blobs', { method: 'POST', body: { projectId: pid, files: b.map((f) => ({ path: f.path, b64: toB64(f.data) })) } });
-        for (const r of res) { const f = b.find((x) => x.path === r.path)!; f.sha = r.sha; }
-        done += b.length;
-        log(`Upload ${done}/${changed.length} file`);
-        setProg(0.2 + 0.7 * (done / changed.length));
-      }
-      const entries = mode === 'replace'
-        ? [...files.map((f) => ({ path: f.path, sha: f.sha, mode: existing[f.path]?.mode || '100644' })), ...kept.map(([path, e]) => ({ path, sha: e.sha, mode: e.mode }))]
-        : changed.map((f) => ({ path: f.path, sha: f.sha, mode: existing[f.path]?.mode || '100644' }));
-
-      log('Membuat commit…');
-      const fin = await api('/push/finish', {
-        method: 'POST',
-        body: { projectId: pid, message: msg.trim() || `Update dari Kantor Bos (${isZip ? file!.name : `${picked.length} file → ${prefix.trim()}`})`, entries, base: mode === 'merge',
-          parentSha: start.parentSha, parentTree: start.parentTree, newBranch: start.newBranch, changedCount: changed.length + deleted.length },
-      });
-      setProg(1);
-      if (fin.unchanged) { log('Tidak ada perubahan.', 'ok'); return; }
-      setLines((l) => [...l, { t: `Commit ${fin.sha.slice(0, 7)} berhasil — Cloudflare deploy otomatis.`, c: 'ok' }, { t: 'Lihat commit di GitHub ↗', href: fin.url }]);
+      if (fin.unchanged) { toast('Tidak ada perubahan'); return; }
+      if (fin.cancelled) return;
+      setLines((l) => [...l, { t: `Commit ${fin.sha.slice(0, 7)} berhasil — deploy otomatis berjalan.`, c: 'ok' }, { t: 'Lihat commit di GitHub ↗', href: fin.url }]);
       toast('+1 XP · Push berhasil! Karyawan mulai kerja.', 'xp');
-      window.dispatchEvent(new Event('kb-stats'));
     } catch (e: any) {
       log(`Gagal: ${e.message}`, 'bad');
       toast(e.message, 'bad');
@@ -177,13 +79,18 @@ export default function UploadScreen() {
   if (!projects) return <Loading />;
   if (!projects.length) return (
     <Panel title="UPLOAD" icon="up">
-      <p className="muted">Belum ada proyek. Rekrut karyawan dulu di menu Atur.</p>
-      <Link className="gbtn gbtn-gold" href="/atur"><span>+ Rekrut karyawan</span></Link>
+      <p className="muted">Belum ada proyek. Buat proyek baru dari zip, atau rekrut karyawan untuk repo yang sudah ada.</p>
+      <Link className="gbtn gbtn-gold" href="/baru"><span>🚀 Proyek baru</span></Link>
+      <Link className="gbtn gbtn-ghost" href="/atur"><span>+ Repo yang sudah ada</span></Link>
     </Panel>
   );
 
   return (
     <div className="screen">
+      <Link href="/baru" className="quest-banner">
+        <span className="qb-tag">BARU</span>
+        <span className="qb-text"><b>🚀 Proyek baru</b> · buat repo GitHub + deploy ke Cloudflare dari satu zip</span>
+      </Link>
       <Panel title="UPLOAD" icon="up">
         <Field label="Proyek">
           <select value={pid} onChange={(e) => setPid(e.target.value)}>

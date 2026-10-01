@@ -5,10 +5,12 @@
   "packageManager": "npm@10.9.7",
   "dependencies": {
     "@vinext/cloudflare": "^1.0.0",
+    "blakejs": "^1.2.1",
     "fflate": "^0.8.3",
     "react": "latest",
     "react-dom": "latest",
     "react-server-dom-webpack": "^19.3.0",
+    "tweetnacl": "^1.0.3",
     "vinext": "^1.0.0"
   },
   "devDependencies": {

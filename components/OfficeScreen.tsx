@@ -118,7 +118,8 @@ export default function OfficeScreen() {
         {workers && !workers.length && !err && (
           <div className="office-empty">
             <p>Kantor masih sepi, Bos. Rekrut karyawan pertama!</p>
-            <Link className="gbtn gbtn-gold" href="/atur"><span>+ Rekrut karyawan</span></Link>
+            <Link className="gbtn gbtn-gold" href="/baru"><span>🚀 Proyek baru</span></Link>
+            <Link className="gbtn gbtn-ghost" href="/atur"><span>+ Repo yang sudah ada</span></Link>
           </div>
         )}
       </div>

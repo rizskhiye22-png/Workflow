@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { api, toast, pushSupported, currentPushSub, enablePush, disablePush } from '@/lib/client';
 import { Btn, ErrorBox, Field, Loading, Panel, Sheet } from './ui';
@@ -31,6 +32,8 @@ export default function SettingsScreen() {
   return (
     <div className="screen">
       <Panel title="KARYAWAN" icon="people" right={<Btn variant="green" onClick={() => setEdit({})}>+ Rekrut</Btn>}>
+        <Link href="/baru" className="gbtn gbtn-gold block"><span>🚀 Proyek baru dari zip</span></Link>
+        <p className="muted small">"+ Rekrut" untuk repo GitHub yang sudah ada.</p>
         <ul className="roster">
           {projects.map((p) => (
             <li key={p.id}>
@@ -48,6 +51,7 @@ export default function SettingsScreen() {
         <ul className="roster plain">
           <li><span>Token GitHub</span><Ok v={me.config.github} /></li>
           <li><span>Token Cloudflare + Account ID</span><Ok v={me.config.cloudflare} /></li>
+          <li><span>Kunci deploy (CF_DEPLOY_TOKEN)</span><Ok v={me.config.deploy} /></li>
         </ul>
         <Btn block disabled={checking} onClick={async () => {
           setChecking(true);
@@ -115,6 +119,16 @@ function ProjectForm({ p, onDone, onCancel }: { p: any; onDone: () => void; onCa
         </Field>
       )}
       <Field label="URL situs" hint="(opsional)"><input value={v.siteUrl} placeholder="https://…" onChange={set('siteUrl')} /></Field>
+      {p.id && (
+        <div className="review">
+          <p className="review-title">DEPLOY OTOMATIS</p>
+          <p className="small">Pasang kunci Cloudflare (CLOUDFLARE_API_TOKEN &amp; CLOUDFLARE_ACCOUNT_ID) ke secret repo <b>{p.owner}/{p.repo}</b>, supaya workflow GitHub Actions di repo itu bisa deploy.</p>
+          <Btn variant="green" type="button" onClick={async () => {
+            try { const r = await api(`/projects/${encodeURIComponent(p.id)}/secrets`, { method: 'POST', body: {} }); toast('Kunci deploy terpasang! Jalankan ulang workflow di tab Actions.', 'ok'); window.open(r.actionsUrl, '_blank'); }
+            catch (er: any) { toast(er.message, 'bad'); }
+          }}>🔑 Pasang deploy otomatis</Btn>
+        </div>
+      )}
       <div className="btn-row">
         <Btn variant="gold" type="submit">Simpan</Btn>
         {p.id && <Btn variant="red" type="button" onClick={del}>Pecat</Btn>}

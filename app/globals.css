@@ -437,3 +437,5 @@ th { background: #1c2240; color: var(--gold); position: sticky; top: 0; }
 .report-toggle { margin-left: auto; }
 .report-list { list-style: none; margin: 0; padding: 0 14px 12px; display: grid; gap: 6px; font-size: 15px; }
 .notify-cfg { margin-top: 14px; }
+.warnline { color: #ffd36b; font-size: 15px; margin: 6px 0; }
+.gbtn.block + .muted { margin-top: 8px; }

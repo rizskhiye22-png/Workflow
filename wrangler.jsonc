@@ -24,5 +24,5 @@
   // KV untuk data dashboard — dibuat otomatis saat deploy pertama
   "kv_namespaces": [{ "binding": "DASH_KV" }]
   // Secret diisi di dashboard Cloudflare (Settings → Variables and Secrets):
-  // DASHBOARD_PASSWORD, SESSION_SECRET, GITHUB_TOKEN, CF_API_TOKEN, CF_ACCOUNT_ID
+  // DASHBOARD_PASSWORD, SESSION_SECRET, GITHUB_TOKEN, CF_API_TOKEN, CF_ACCOUNT_ID, CF_DEPLOY_TOKEN (opsional)
 }

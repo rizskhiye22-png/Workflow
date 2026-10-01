@@ -20,6 +20,8 @@ export default defineConfig({
       GITHUB_TOKEN: bindings.secret(),
       CF_API_TOKEN: bindings.secret(),
       CF_ACCOUNT_ID: bindings.secret(),
+      // Token deploy (template "Edit Cloudflare Workers" + D1 Edit + KV Edit). Dipasang otomatis ke secret repo proyek.
+      CF_DEPLOY_TOKEN: bindings.secret(),
     },
   }),
 });

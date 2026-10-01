@@ -44,10 +44,21 @@
 - **Proyek Worker atau Pages**. Status deploy dibaca dari Cloudflare sesuai jenis proyeknya.
 - **Upload aman**. Ada pratinjau file yang ditambah atau dihapus sebelum push, folder pembungkus hanya dilepas 1 lapis, dan kamu bisa memilih folder tujuan.
 
+### 🚀 Proyek baru dari zip (menu Upload → Proyek baru)
+Pilih zip, lalu Kantor Bos akan:
+1. Mengenali jenis proyek: situs statis, perlu build (Vite/React/Vue…), atau Worker yang sudah punya `wrangler.jsonc`.
+2. Membuat repo GitHub (private secara default).
+3. Memasang secret `CLOUDFLARE_API_TOKEN` & `CLOUDFLARE_ACCOUNT_ID` di repo itu, dari `CF_DEPLOY_TOKEN`.
+4. Menambahkan `.github/workflows/deploy.yml`, plus `wrangler.jsonc` untuk situs statis atau hasil build.
+5. Merekrut karyawan baru, lalu meng-upload isi zip. GitHub Actions kemudian men-deploy ke `https://<nama>.<akun>.workers.dev`.
+
+Sebelum menimpa repo yang sudah berisi atau Worker yang sudah ada, Kantor Bos selalu minta konfirmasi dulu.
+Untuk repo lama (misalnya yang dibuat dari laptop), pakai **Atur → proyek → 🔑 Pasang deploy otomatis**.
+
 ### Izin token tambahan
 | Token | Izin |
 |---|---|
-| GitHub (fine-grained) | Contents: Read & write · Workflows: Read & write · Actions: Read · Metadata: Read |
+| GitHub (fine-grained, All repositories) | Contents: Read & write · Workflows: Read & write · Actions: Read · Metadata: Read · **Administration: Read & write** (buat repo) · **Secrets: Read & write** (pasang kunci deploy) |
 | Cloudflare (User API Token) | Workers KV Storage: Edit · D1: Edit · Cloudflare Pages: Read · **Workers Scripts: Read** · **Workers Builds Configuration: Read** (untuk status proyek Worker) |
 
 ## Setup (cukup sekali)
@@ -92,6 +103,7 @@ Buka Worker `kantor-bos`, lalu masuk ke **Settings → Variables and Secrets** d
 | `GITHUB_TOKEN` | token GitHub |
 | `CF_API_TOKEN` | token Cloudflare |
 | `CF_ACCOUNT_ID` | Account ID |
+| `CF_DEPLOY_TOKEN` | token Cloudflare template **Edit Cloudflare Workers** + **D1: Edit** + **Workers KV Storage: Edit**. Dipasang otomatis ke repo proyek |
 
 ### 4. (Disarankan) Kunci lapis kedua
 Aktifkan **Cloudflare Access** untuk alamat `workers.dev` di Worker → Settings → Domains & Routes, dan izinkan hanya email kamu.
