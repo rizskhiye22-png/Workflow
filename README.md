@@ -29,16 +29,17 @@
 ## Setup (cukup sekali)
 
 ### 1. Hubungkan repo ini ke Cloudflare
-1. Buka dash.cloudflare.com, lalu masuk ke **Workers & Pages → Create → Import a repository**.
+1. Buka dash.cloudflare.com → **Workers & Pages → Create → tab Workers → Import a repository**. Jangan pilih Pages.
 2. Pilih repo ini.
-3. Isi pengaturan build:
-   - Build command: `npm run build`
-   - Deploy command: `npm run deploy`
+3. Isi pengaturannya:
+   - **Project name**: `kantor-bos`
+   - **Build command**: `npm run build`
+   - **Deploy command**: `npx wrangler deploy` (biarkan default)
 4. Klik Deploy.
 
-KV `DASH_KV` dibuat otomatis saat deploy pertama. Setiap push ke `main` akan men-deploy ulang.
+KV `DASH_KV` dibuat otomatis saat deploy pertama, dan setiap push ke `main` akan men-deploy ulang.
 
-> Kalau deploy gagal karena KV belum ada: buat KV di **Storage & Databases → KV → Create**, lalu isi ID-nya di `cloudflare.config.ts` (`DASH_KV: bindings.kv({ id: "..." })`).
+> Konfigurasi Worker ada di dua file: `cloudflare.config.ts` (dipakai saat build/dev) dan `wrangler.jsonc` (dipakai saat deploy). Kalau mengubah binding, ubah di keduanya.
 
 ### 2. Buat token
 

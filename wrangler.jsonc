@@ -1,0 +1,26 @@
+// Dipakai oleh `npx wrangler deploy` (perintah deploy bawaan Cloudflare Workers Builds).
+// Ia mengunggah hasil `npm run build` yang sudah jadi di .cloudflare/output.
+// Pengaturan utama Worker ada di cloudflare.config.ts — samakan kalau mengubah salah satunya.
+{
+  "name": "kantor-bos",
+  "main": ".cloudflare/output/v0/workers/default/bundle/index.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "no_bundle": true,
+  "find_additional_modules": true,
+  "base_dir": ".cloudflare/output/v0/workers/default/bundle",
+  "rules": [
+    { "type": "ESModule", "globs": ["**/*.js", "**/*.mjs"], "fallthrough": true },
+    { "type": "Text", "globs": ["**/*.json"], "fallthrough": true }
+  ],
+  "assets": {
+    "directory": ".cloudflare/output/v0/workers/default/assets",
+    "binding": "ASSETS",
+    "not_found_handling": "none"
+  },
+  "observability": { "enabled": true },
+  // KV untuk data dashboard — dibuat otomatis saat deploy pertama
+  "kv_namespaces": [{ "binding": "DASH_KV" }]
+  // Secret diisi di dashboard Cloudflare (Settings → Variables and Secrets):
+  // DASHBOARD_PASSWORD, SESSION_SECRET, GITHUB_TOKEN, CF_API_TOKEN, CF_ACCOUNT_ID
+}

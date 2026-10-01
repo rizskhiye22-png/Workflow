@@ -4,7 +4,7 @@ export default defineConfig({
   worker: defineWorker({
     name: "kantor-bos",
     entrypoint: "vinext/server/fetch-handler",
-    compatibilityDate: "2026-10-01",
+    compatibilityDate: "2026-09-01",
     compatibilityFlags: ["nodejs_compat"],
     assets: { notFoundHandling: "none" },
     observability: { enabled: true },
