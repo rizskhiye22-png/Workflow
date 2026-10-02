@@ -439,3 +439,8 @@ th { background: #1c2240; color: var(--gold); position: sticky; top: 0; }
 .notify-cfg { margin-top: 14px; }
 .warnline { color: #ffd36b; font-size: 15px; margin: 6px 0; }
 .gbtn.block + .muted { margin-top: 8px; }
+.namecheck { margin: -6px 0 14px; padding: 8px 10px; font-size: 15px; background: #141936; box-shadow: 0 0 0 2px var(--ink); }
+.namecheck.ok { color: #8ff0b4; box-shadow: 0 0 0 2px var(--ink), inset 3px 0 0 var(--green); }
+.namecheck.warn { color: #ffd36b; box-shadow: 0 0 0 2px var(--ink), inset 3px 0 0 var(--gold); }
+.namecheck.bad { color: #ff9aa5; box-shadow: 0 0 0 2px var(--ink), inset 3px 0 0 var(--red); }
+.seg button:disabled { opacity: .4; cursor: not-allowed; }

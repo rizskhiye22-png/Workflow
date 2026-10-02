@@ -22,6 +22,15 @@ export default function NewProjectScreen() {
   const [result, setResult] = useState<any>(null);
   const [over, setOver] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
+  const [nameCheck, setNameCheck] = useState<any>(null);
+  useEffect(() => {
+    if (phase !== 'form' || !f.workerName) return;
+    setNameCheck({ loading: true });
+    const t = setTimeout(() => {
+      api(`/newproject/check?target=${f.target}&name=${encodeURIComponent(f.workerName)}`).then(setNameCheck).catch(() => setNameCheck(null));
+    }, 500);
+    return () => clearTimeout(t);
+  }, [f.workerName, f.target, phase]);
 
   useEffect(() => { api('/newproject/info').then(setInfo).catch(setErr); }, []);
   useEffect(() => { logRef.current?.scrollTo(0, 1e9); }, [lines]);
@@ -41,7 +50,7 @@ export default function NewProjectScreen() {
       setFiles(fl); setDet(d);
       setF({
         name: file.name.replace(/\.zip$/i, ''), worker: NAMES[Math.floor(Math.random() * NAMES.length)],
-        repo: base, private: true, workerName: d.workerName || base,
+        repo: base, private: true, workerName: d.workerName || base, target: 'worker',
         kind: d.kind === 'unknown' ? 'static' : d.kind, outDir: d.outDir, spa: d.spa, buildCmd: d.buildCmd || 'npm run build',
       });
       setPhase('form');
@@ -60,7 +69,7 @@ export default function NewProjectScreen() {
       const r = await api('/newproject', {
         method: 'POST',
         body: {
-          name: f.name, worker: f.worker, repo: f.repo, private: f.private, workerName: f.workerName, kind: f.kind,
+          name: f.name, worker: f.worker, repo: f.repo, private: f.private, workerName: f.workerName, kind: f.kind, target: f.target,
           hasPackage: det.hasPackage, hasLock: det.hasLock, buildCmd: f.kind === 'build' ? f.buildCmd : '', deployScript: det.deployScript,
           outDir: f.outDir, spa: f.spa, hasOwnWorkflow: det.hasOwnWorkflow, hasGitignore: det.hasGitignore, overwrite,
         },
@@ -97,7 +106,7 @@ export default function NewProjectScreen() {
         {!info.deployTokenReady && (
           <div className="review danger">
             <p className="review-title">KUNCI DEPLOY BELUM ADA</p>
-            <p className="small">Supaya repo baru bisa langsung deploy, isi secret <b>CF_DEPLOY_TOKEN</b> di Worker Kantor Bos (Cloudflare → workflow → Settings → Variables and Secrets). Isinya token Cloudflare template <b>Edit Cloudflare Workers</b> + izin <b>D1: Edit</b> & <b>Workers KV Storage: Edit</b>. Tanpa ini proyek tetap dibuat, tapi secret repo harus diisi manual.</p>
+            <p className="small">Supaya repo baru bisa langsung deploy, isi secret <b>CF_DEPLOY_TOKEN</b> di Worker Kantor Bos (Cloudflare → workflow → Settings → Variables and Secrets). Isinya token Cloudflare template <b>Edit Cloudflare Workers</b> + izin <b>D1: Edit</b>, <b>Workers KV Storage: Edit</b> & <b>Cloudflare Pages: Edit</b>. Tanpa ini proyek tetap dibuat, tapi secret repo harus diisi manual.</p>
           </div>
         )}
         <label className={`chest ${over ? 'over' : ''} ${zip ? 'has' : ''}`}
@@ -122,11 +131,30 @@ export default function NewProjectScreen() {
             <input value={f.repo} onChange={(e) => setF((x: any) => ({ ...x, repo: e.target.value.replace(/[^A-Za-z0-9_.-]/g, '-') }))} />
           </Field>
           <label className="toggle"><input type="checkbox" checked={f.private} onChange={set('private')} /><span className="tg" aria-hidden /><span>Repo private <small className="muted">(disarankan)</small></span></label>
-          <Field label="Nama Worker di Cloudflare" hint={det.kind === 'wrangler' ? '(dari wrangler config)' : '(jadi alamat situs)'}>
-            <input value={f.workerName} disabled={det.kind === 'wrangler' && !!det.workerName}
-              onChange={(e) => setF((x: any) => ({ ...x, workerName: slugify(e.target.value) }))} />
+          <Field label="Deploy ke Cloudflare sebagai">
+            <div className="seg" role="radiogroup">
+              <button type="button" role="radio" aria-checked={f.target === 'worker'} className={f.target === 'worker' ? 'on' : ''} onClick={() => { sfx('tab'); setF((x: any) => ({ ...x, target: 'worker' })); }}>⟨⟩ WORKER</button>
+              <button type="button" role="radio" aria-checked={f.target === 'pages'} className={f.target === 'pages' ? 'on' : ''} disabled={det.kind === 'wrangler'}
+                onClick={() => { sfx('tab'); setF((x: any) => ({ ...x, target: 'pages' })); }}>⚡ PAGES</button>
+            </div>
           </Field>
-          {info.subdomain && <p className="muted small">Alamat situs: <b>https://{f.workerName}.{info.subdomain}.workers.dev</b></p>}
+          <p className="muted small">{f.target === 'pages'
+            ? 'Pages: khusus situs (HTML/CSS/JS atau hasil build). Alamat *.pages.dev.'
+            : det.kind === 'wrangler' ? 'Proyek ini punya kode Worker (wrangler), jadi dideploy sebagai Worker.' : 'Worker: situs + bisa ditambah API/KV/D1 nanti. Alamat *.workers.dev.'}</p>
+          <Field label={f.target === 'pages' ? 'Nama proyek Pages' : 'Nama Worker'} hint="(huruf kecil, angka, -)">
+            <input value={f.workerName} disabled={det.kind === 'wrangler' && !!det.workerName}
+              onChange={(e) => setF((x: any) => ({ ...x, workerName: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 63) }))} />
+          </Field>
+          {nameCheck && (
+            <p className={`namecheck ${nameCheck.loading ? '' : nameCheck.valid === false ? 'bad' : nameCheck.exists ? 'warn' : nameCheck.exists === false ? 'ok' : ''}`}>
+              {nameCheck.loading ? '… mengecek nama di Cloudflare'
+                : nameCheck.valid === false ? '✗ Nama tidak valid (huruf kecil, angka, tanda -, tidak diawali/diakhiri -)'
+                : nameCheck.exists ? `⚠ "${f.workerName}" SUDAH ADA di Cloudflare — situs lama akan ditimpa. Ganti nama kalau mau proyek baru.`
+                : nameCheck.exists === false ? `✓ Nama tersedia — ${f.target === 'pages' ? 'proyek Pages' : 'Worker'} baru akan dibuat`
+                : 'Nama tidak bisa dicek (token deploy belum ada). Tetap bisa dilanjutkan.'}
+              {nameCheck.url && !nameCheck.loading && <><br /><small>Alamat: <b>{nameCheck.url}</b></small></>}
+            </p>
+          )}
           {det.kind !== 'wrangler' && (
             <>
               <Field label="Jenis">
@@ -139,7 +167,7 @@ export default function NewProjectScreen() {
                 <Field label={f.kind === 'build' ? 'Folder hasil build' : 'Folder situs'}><input value={f.outDir} onChange={set('outDir')} placeholder="." /></Field>
                 {f.kind === 'build' && <Field label="Perintah build"><input value={f.buildCmd} onChange={set('buildCmd')} /></Field>}
               </div>
-              <label className="toggle"><input type="checkbox" checked={f.spa} onChange={set('spa')} /><span className="tg" aria-hidden /><span>Single-page app <small className="muted">(React/Vue router: semua alamat → index.html)</small></span></label>
+              {f.target === 'worker' && <label className="toggle"><input type="checkbox" checked={f.spa} onChange={set('spa')} /><span className="tg" aria-hidden /><span>Single-page app <small className="muted">(React/Vue router: semua alamat → index.html)</small></span></label>}
             </>
           )}
 

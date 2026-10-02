@@ -50,7 +50,12 @@ Pilih zip, lalu Kantor Bos akan:
 2. Membuat repo GitHub (private secara default).
 3. Memasang secret `CLOUDFLARE_API_TOKEN` & `CLOUDFLARE_ACCOUNT_ID` di repo itu, dari `CF_DEPLOY_TOKEN`.
 4. Menambahkan `.github/workflows/deploy.yml`, plus `wrangler.jsonc` untuk situs statis atau hasil build.
-5. Merekrut karyawan baru, lalu meng-upload isi zip. GitHub Actions kemudian men-deploy ke `https://<nama>.<akun>.workers.dev`.
+5. Merekrut karyawan baru, lalu meng-upload isi zip. GitHub Actions kemudian men-deploy ke Cloudflare.
+
+**Pilihan tujuan deploy:**
+- **⟨⟩ Worker** → `https://<nama>.<akun>.workers.dev`. Kalau Worker dengan nama itu belum ada, akan dibuat otomatis saat deploy pertama.
+- **⚡ Pages** → `https://<nama>.pages.dev`. Kalau proyek Pages-nya belum ada, Kantor Bos langsung membuatnya.
+Nama dicek langsung saat diketik. Kalau sudah dipakai, Kantor Bos menampilkan peringatan dan minta konfirmasi sebelum menimpa.
 
 Sebelum menimpa repo yang sudah berisi atau Worker yang sudah ada, Kantor Bos selalu minta konfirmasi dulu.
 Untuk repo lama (misalnya yang dibuat dari laptop), pakai **Atur → proyek → 🔑 Pasang deploy otomatis**.
@@ -103,7 +108,7 @@ Buka Worker `kantor-bos`, lalu masuk ke **Settings → Variables and Secrets** d
 | `GITHUB_TOKEN` | token GitHub |
 | `CF_API_TOKEN` | token Cloudflare |
 | `CF_ACCOUNT_ID` | Account ID |
-| `CF_DEPLOY_TOKEN` | token Cloudflare template **Edit Cloudflare Workers** + **D1: Edit** + **Workers KV Storage: Edit**. Dipasang otomatis ke repo proyek |
+| `CF_DEPLOY_TOKEN` | token Cloudflare template **Edit Cloudflare Workers** + **D1: Edit** + **Workers KV Storage: Edit** + **Cloudflare Pages: Edit**. Dipasang otomatis ke repo proyek |
 
 ### 4. (Disarankan) Kunci lapis kedua
 Aktifkan **Cloudflare Access** untuk alamat `workers.dev` di Worker → Settings → Domains & Routes, dan izinkan hanya email kamu.
