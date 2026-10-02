@@ -151,7 +151,7 @@ export default function NewProjectScreen() {
                 : nameCheck.valid === false ? '✗ Nama tidak valid (huruf kecil, angka, tanda -, tidak diawali/diakhiri -)'
                 : nameCheck.exists ? `⚠ "${f.workerName}" SUDAH ADA di Cloudflare — situs lama akan ditimpa. Ganti nama kalau mau proyek baru.`
                 : nameCheck.exists === false ? `✓ Nama tersedia — ${f.target === 'pages' ? 'proyek Pages' : 'Worker'} baru akan dibuat`
-                : 'Nama tidak bisa dicek (token deploy belum ada). Tetap bisa dilanjutkan.'}
+                : `Nama belum bisa dicek: ${nameCheck.reason || 'token deploy belum siap'}`}
               {nameCheck.url && !nameCheck.loading && <><br /><small>Alamat: <b>{nameCheck.url}</b></small></>}
             </p>
           )}
